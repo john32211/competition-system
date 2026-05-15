@@ -1,0 +1,195 @@
+-- Robotics dashboard schema patch for your existing bigint-based tables.
+-- Safe to run in Supabase SQL Editor after your current groups/students/projects/components/sessions tables exist.
+
+-- Profiles and roles.
+create table if not exists public.profiles (
+  id uuid primary key references auth.users (id) on delete cascade,
+  email text,
+  full_name text,
+  role text not null default 'instructor'
+    check (role in ('admin', 'instructor')),
+  created_at timestamptz not null default now()
+);
+
+alter table public.profiles enable row level security;
+
+drop policy if exists "profiles_select_authenticated" on public.profiles;
+drop policy if exists "profiles_update_own" on public.profiles;
+drop policy if exists "profiles_insert_self" on public.profiles;
+
+create policy "profiles_select_authenticated"
+  on public.profiles for select
+  to authenticated
+  using (true);
+
+create policy "profiles_update_own"
+  on public.profiles for update
+  to authenticated
+  using (auth.uid() = id)
+  with check (auth.uid() = id);
+
+create policy "profiles_insert_self"
+  on public.profiles for insert
+  to authenticated
+  with check (auth.uid() = id);
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, email, full_name, role)
+  values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
+    coalesce(new.raw_user_meta_data->>'role', 'instructor')::text
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+
+insert into public.profiles (id, email, full_name, role)
+select
+  u.id,
+  u.email,
+  coalesce(u.raw_user_meta_data->>'full_name', split_part(u.email, '@', 1)),
+  'instructor'
+from auth.users u
+where not exists (select 1 from public.profiles p where p.id = u.id)
+on conflict (id) do nothing;
+
+update public.profiles
+set role = 'admin'
+where email = 'jamgad43@gmail.com';
+
+-- Link legacy bigint groups to auth profiles.
+alter table public.groups
+  add column if not exists instructor_id uuid references public.profiles (id);
+
+create index if not exists groups_instructor_id_idx
+  on public.groups (instructor_id);
+
+-- Project/session enrichment.
+alter table public.projects
+  add column if not exists due_date date;
+
+alter table public.sessions
+  add column if not exists notes text,
+  add column if not exists issues text,
+  add column if not exists instructor_comments text;
+
+-- Central inventory used by /inventory and project component allocation.
+create table if not exists public.inventory_items (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  category text,
+  total_stock integer not null default 0 check (total_stock >= 0),
+  remaining_stock integer not null default 0 check (remaining_stock >= 0),
+  missing_quantity integer not null default 0 check (missing_quantity >= 0),
+  low_stock_threshold integer not null default 3 check (low_stock_threshold >= 0),
+  created_at timestamptz not null default now()
+);
+
+alter table public.components
+  add column if not exists inventory_item_id uuid references public.inventory_items(id) on delete set null,
+  add column if not exists shortage integer not null default 0 check (shortage >= 0);
+
+alter table public.inventory_items enable row level security;
+
+drop policy if exists "authenticated users can read inventory" on public.inventory_items;
+drop policy if exists "authenticated users can manage inventory" on public.inventory_items;
+drop policy if exists "admins can manage inventory" on public.inventory_items;
+
+create policy "authenticated users can read inventory"
+  on public.inventory_items for select
+  to authenticated
+  using (true);
+
+create policy "admins can manage inventory"
+  on public.inventory_items for all
+  to authenticated
+  using (
+    exists (
+      select 1
+      from public.profiles p
+      where p.id = auth.uid()
+        and p.role = 'admin'
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.profiles p
+      where p.id = auth.uid()
+        and p.role = 'admin'
+    )
+  );
+
+insert into public.inventory_items
+  (name, category, total_stock, remaining_stock, missing_quantity, low_stock_threshold)
+values
+  ('Arduino Uno', 'Controllers', 20, 20, 0, 5),
+  ('Servo Motor', 'Actuators', 30, 30, 0, 6),
+  ('Ultrasonic Sensor', 'Sensors', 18, 18, 0, 4),
+  ('LED', 'Electronics', 100, 100, 0, 20),
+  ('LDR Sensor', 'Sensors', 24, 24, 0, 6),
+  ('DC Motor', 'Actuators', 28, 28, 0, 6),
+  ('Motor Driver', 'Drivers', 18, 18, 0, 4),
+  ('Breadboard', 'Prototyping', 25, 25, 0, 5),
+  ('Battery Pack', 'Power', 22, 22, 0, 5)
+on conflict (name) do nothing;
+
+-- Attendance table matching your existing bigint ids.
+create table if not exists public.session_attendance (
+  id bigint generated by default as identity primary key,
+  session_id bigint not null references public.sessions (id) on delete cascade,
+  student_id bigint not null references public.students (id) on delete cascade,
+  present boolean not null default true,
+  created_at timestamptz not null default now(),
+  unique (session_id, student_id)
+);
+
+create index if not exists session_attendance_session_id_idx
+  on public.session_attendance (session_id);
+
+create index if not exists session_attendance_student_id_idx
+  on public.session_attendance (student_id);
+
+alter table public.session_attendance enable row level security;
+
+drop policy if exists "session_attendance_authenticated_all" on public.session_attendance;
+
+create policy "session_attendance_authenticated_all"
+  on public.session_attendance
+  for all
+  to authenticated
+  using (true)
+  with check (true);
+
+-- Lightweight notifications surface.
+create table if not exists public.notifications (
+  id bigint generated by default as identity primary key,
+  title text not null,
+  body text not null,
+  type text not null default 'info',
+  read_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+alter table public.notifications enable row level security;
+
+drop policy if exists "authenticated users read notifications" on public.notifications;
+
+create policy "authenticated users read notifications"
+  on public.notifications for select
+  to authenticated
+  using (true);
