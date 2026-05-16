@@ -1,6 +1,7 @@
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
+import { connection } from "next/server";
 import {
   demoComponents,
   demoGroups,
@@ -16,6 +17,8 @@ async function getTable<T>(table: string, fallback: T[]) {
 }
 
 export default async function DashboardPage() {
+  await connection();
+
   const [groups, students, projects, components, inventory] = await Promise.all([
     getTable<Group>("groups", demoGroups),
     getTable<Student>("students", demoStudents),
@@ -24,7 +27,11 @@ export default async function DashboardPage() {
     getTable<InventoryItem>("inventory_items", demoInventory),
   ]);
 
-  const shortages = inventory.filter((item) => Number(item.missing_quantity ?? 0) > 0);
+  const inventoryShortages = inventory.filter((item) => Number(item.missing_quantity ?? 0) > 0);
+  const componentShortages = components.filter(
+    (component) => Number(component.needed ?? 0) > Number(component.available ?? 0)
+  );
+  const shortageAlertCount = inventoryShortages.length + componentShortages.length;
   const lowStock = inventory.filter(
     (item) =>
       Number(item.remaining_stock ?? 0) <= Number(item.low_stock_threshold ?? 0) ||
@@ -55,7 +62,7 @@ export default async function DashboardPage() {
             </p>
           </div>
           <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
-            {shortages.length} shortage alerts and {lowStock.length} low stock warnings
+            {shortageAlertCount} shortage alerts and {lowStock.length} low stock warnings
           </div>
         </section>
 
@@ -131,7 +138,7 @@ export default async function DashboardPage() {
             <div>
               <h2 className="text-xl font-semibold">Inventory Risk Board</h2>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                Central stock shortages and low inventory warnings
+                Central stock warnings plus project component shortages
               </p>
             </div>
             <Link href="/inventory" className="text-sm font-semibold text-cyan-700 dark:text-cyan-300">
@@ -139,6 +146,17 @@ export default async function DashboardPage() {
             </Link>
           </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            {componentShortages.slice(0, 3).map((component) => (
+              <div key={component.id} className="rounded-md border border-red-200 bg-red-50 p-4 dark:border-red-900/60 dark:bg-red-950/30">
+                <p className="font-semibold">{component.name}</p>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                  Project needs {component.needed}, available {component.available}
+                </p>
+                <p className="mt-3 text-sm font-semibold text-red-600 dark:text-red-300">
+                  Missing {Math.max(Number(component.needed ?? 0) - Number(component.available ?? 0), 0)}
+                </p>
+              </div>
+            ))}
             {lowStock.slice(0, 6).map((item) => (
               <div key={item.id} className="rounded-md border border-slate-200 p-4 dark:border-slate-800">
                 <p className="font-semibold">{item.name}</p>

@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase";
 import { demoGroups, demoInventory, demoProjects } from "@/lib/mockData";
 import type { Group, InventoryItem, Project } from "@/types/database";
 import { AlertTriangle, Bell, CalendarClock, TrendingUp } from "lucide-react";
+import { connection } from "next/server";
 
 async function getRows<T>(table: string, fallback: T[]) {
   const { data, error } = await supabase.from(table).select("*");
@@ -10,6 +11,8 @@ async function getRows<T>(table: string, fallback: T[]) {
 }
 
 export default async function NotificationsPage() {
+  await connection();
+
   const [inventory, projects, groups] = await Promise.all([
     getRows<InventoryItem>("inventory_items", demoInventory),
     getRows<Project>("projects", demoProjects),

@@ -193,3 +193,37 @@ create policy "authenticated users read notifications"
   on public.notifications for select
   to authenticated
   using (true);
+
+-- Supabase Storage bucket used by /files.
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('competition-files', 'competition-files', true, 52428800)
+on conflict (id) do update
+set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit;
+
+drop policy if exists "competition_files_select" on storage.objects;
+drop policy if exists "competition_files_insert" on storage.objects;
+drop policy if exists "competition_files_update" on storage.objects;
+drop policy if exists "competition_files_delete" on storage.objects;
+
+create policy "competition_files_select"
+  on storage.objects for select
+  to authenticated
+  using (bucket_id = 'competition-files');
+
+create policy "competition_files_insert"
+  on storage.objects for insert
+  to authenticated
+  with check (bucket_id = 'competition-files');
+
+create policy "competition_files_update"
+  on storage.objects for update
+  to authenticated
+  using (bucket_id = 'competition-files')
+  with check (bucket_id = 'competition-files');
+
+create policy "competition_files_delete"
+  on storage.objects for delete
+  to authenticated
+  using (bucket_id = 'competition-files');

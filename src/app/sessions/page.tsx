@@ -3,6 +3,7 @@ import DeleteSessionButton from "@/components/DeleteSessionButton";
 import { supabase } from "@/lib/supabase";
 import { demoGroups, demoSessions } from "@/lib/mockData";
 import type { Group, Session } from "@/types/database";
+import { connection } from "next/server";
 
 async function getRows<T>(table: string, fallback: T[]) {
   const { data, error } = await supabase.from(table).select("*");
@@ -10,6 +11,8 @@ async function getRows<T>(table: string, fallback: T[]) {
 }
 
 export default async function SessionsPage() {
+  await connection();
+
   const [sessions, groups] = await Promise.all([
     getRows<Session>("sessions", demoSessions),
     getRows<Group>("groups", demoGroups),
