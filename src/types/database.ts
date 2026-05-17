@@ -51,9 +51,11 @@ export type Session = {
 export type ComponentRequirement = {
   id: string;
   group_id: string;
+  inventory_item_id?: string | null;
   name: string;
   needed: number;
   available: number;
+  shortage?: number | null;
 };
 
 export type InventoryItem = {

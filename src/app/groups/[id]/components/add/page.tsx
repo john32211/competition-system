@@ -1,7 +1,7 @@
 "use client";
 
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import { allocateInventory, getInventoryItems } from "@/services/inventory";
+import { allocateInventory, getInventoryItems, recordMissingInventory } from "@/services/inventory";
 import { supabase } from "@/lib/supabase";
 import type { InventoryItem } from "@/types/database";
 import { useRouter } from "next/navigation";
@@ -44,19 +44,26 @@ export default function AddComponentPage({
     let allocated = 0;
     let shortage = needed;
     let name = customName.trim();
+    let inventoryItemId: string | null = null;
 
     if (selectedItem) {
       name = selectedItem.name;
+      inventoryItemId = selectedItem.id;
       const allocation = await allocateInventory(selectedItem.id, needed);
       allocated = allocation.allocated;
       shortage = allocation.shortage;
+    } else {
+      const { data } = await recordMissingInventory(name, needed);
+      inventoryItemId = data?.id ?? null;
     }
 
     const { error } = await supabase.from("components").insert({
       group_id: groupId,
+      inventory_item_id: inventoryItemId,
       name,
       needed,
       available: allocated,
+      shortage,
     });
 
     setSaving(false);

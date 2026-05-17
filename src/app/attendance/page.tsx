@@ -1,8 +1,8 @@
 "use client";
 
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import { useCurrentProfile } from "@/hooks/useCurrentProfile";
 import { supabase } from "@/lib/supabase";
-import { demoGroups, demoSessions, demoStudents } from "@/lib/mockData";
 import type { Group, Session, Student } from "@/types/database";
 import { useEffect, useMemo, useState } from "react";
 
@@ -14,6 +14,7 @@ type SessionAttendanceRow = {
 };
 
 export default function AttendancePage() {
+  const { loading: profileLoading, profile, isAdmin } = useCurrentProfile();
   const [groups, setGroups] = useState<Group[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -23,26 +24,53 @@ export default function AttendancePage() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    async function load() {
-      const [{ data: groupRows, error: groupsError }, { data: studentRows, error: studentsError }, { data: sessionRows, error: sessionsError }] =
-        await Promise.all([
-          supabase.from("groups").select("*"),
-          supabase.from("students").select("*"),
-          supabase.from("sessions").select("*"),
-        ]);
+    if (profileLoading) return;
 
-      const nextGroups = (groupsError ? demoGroups : groupRows ?? []) as Group[];
-      const nextStudents = (studentsError ? demoStudents : studentRows ?? []) as Student[];
-      const nextSessions = (sessionsError ? demoSessions : sessionRows ?? []) as Session[];
+    let active = true;
+
+    async function load() {
+      let groupQuery = supabase.from("groups").select("*").order("name", { ascending: true });
+      if (!isAdmin && profile?.id) {
+        groupQuery = groupQuery.eq("instructor_id", profile.id);
+      }
+
+      const { data: groupRows, error: groupsError } = await groupQuery;
+      const nextGroups = (groupRows ?? []) as Group[];
+      const groupIds = nextGroups.map((group) => group.id);
+
+      let nextStudents: Student[] = [];
+      let nextSessions: Session[] = [];
+      let studentsErrorMessage = "";
+      let sessionsErrorMessage = "";
+
+      if (groupIds.length > 0) {
+        const [{ data: studentRows, error: studentsError }, { data: sessionRows, error: sessionsError }] =
+          await Promise.all([
+            supabase.from("students").select("*").in("group_id", groupIds),
+            supabase.from("sessions").select("*").in("group_id", groupIds),
+          ]);
+
+        nextStudents = (studentRows ?? []) as Student[];
+        nextSessions = (sessionRows ?? []) as Session[];
+        studentsErrorMessage = studentsError?.message ?? "";
+        sessionsErrorMessage = sessionsError?.message ?? "";
+      }
+
+      if (!active) return;
 
       setGroups(nextGroups);
       setStudents(nextStudents);
       setSessions(nextSessions);
       setGroupId(String(nextGroups[0]?.id ?? ""));
+      setMessage(groupsError?.message ?? studentsErrorMessage ?? sessionsErrorMessage);
     }
 
     load();
-  }, []);
+
+    return () => {
+      active = false;
+    };
+  }, [profileLoading, profile?.id, isAdmin]);
 
   const groupSessions = useMemo(
     () => sessions.filter((session) => String(session.group_id) === groupId),
@@ -129,7 +157,9 @@ export default function AttendancePage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold">Attendance</h1>
-          <p className="mt-1 text-slate-500 dark:text-slate-400">Mark present or absent students per team session.</p>
+          <p className="mt-1 text-slate-500 dark:text-slate-400">
+            {isAdmin ? "Mark attendance for all teams." : "Mark attendance for your assigned teams only."}
+          </p>
         </div>
 
         <section className="grid grid-cols-1 gap-4 rounded-md border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 md:grid-cols-3">

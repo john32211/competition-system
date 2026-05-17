@@ -3,7 +3,7 @@
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import RoleNotice from "@/components/RoleNotice";
 import { useCurrentProfile } from "@/hooks/useCurrentProfile";
-import { createInventoryItem, deleteInventoryItem, getInventoryItems } from "@/services/inventory";
+import { createInventoryItem, deleteInventoryItem, getInventoryItems, restockInventoryItem } from "@/services/inventory";
 import type { InventoryItem } from "@/types/database";
 import { AlertTriangle, PackagePlus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -14,10 +14,20 @@ export default function InventoryPage() {
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
   const [totalStock, setTotalStock] = useState(1);
-  const [threshold, setThreshold] = useState(3);
+  const [restockAmounts, setRestockAmounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [loadError, setLoadError] = useState("");
+
+  const setupError =
+    loadError.includes("Could not find the table") ||
+    loadError.includes("schema cache") ||
+    loadError.includes("relation") ||
+    loadError.includes("does not exist");
+  const connectionError =
+    loadError.includes("Failed to fetch") ||
+    loadError.includes("NetworkError") ||
+    loadError.includes("fetch failed");
 
   async function loadItems() {
     setLoading(true);
@@ -61,7 +71,6 @@ export default function InventoryPage() {
       name: name.trim(),
       category: category.trim(),
       total_stock: totalStock,
-      low_stock_threshold: threshold,
     });
 
     if (error) {
@@ -72,8 +81,31 @@ export default function InventoryPage() {
     setName("");
     setCategory("");
     setTotalStock(1);
-    setThreshold(3);
     setMessage("Inventory item created.");
+    await loadItems();
+  }
+
+  async function handleRestock(item: InventoryItem) {
+    if (!isAdmin) {
+      setMessage("Only admins can edit central inventory.");
+      return;
+    }
+
+    const quantity = Number(restockAmounts[item.id] ?? 0);
+    if (quantity <= 0) {
+      setMessage("Enter a restock quantity greater than zero.");
+      return;
+    }
+
+    const { error } = await restockInventoryItem(item, quantity);
+
+    if (error) {
+      setMessage(`Inventory was not updated: ${error.message}`);
+      return;
+    }
+
+    setRestockAmounts((current) => ({ ...current, [item.id]: 0 }));
+    setMessage(`${item.name} restocked by ${quantity}.`);
     await loadItems();
   }
 
@@ -119,11 +151,29 @@ export default function InventoryPage() {
 
         {loadError ? (
           <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-            <p className="font-semibold">Inventory database setup is required.</p>
-            <p className="mt-1">
-              Supabase returned: {loadError}. Run the inventory schema in{" "}
-              <span className="font-mono">supabase-schema.sql</span>, then refresh this page.
-            </p>
+            {setupError ? (
+              <>
+                <p className="font-semibold">Inventory database setup is required.</p>
+                <p className="mt-1">
+                  Supabase returned: {loadError}. Run the inventory schema in{" "}
+                  <span className="font-mono">supabase-schema.sql</span>, then refresh this page.
+                </p>
+              </>
+            ) : connectionError ? (
+              <>
+                <p className="font-semibold">Supabase connection failed.</p>
+                <p className="mt-1">
+                  The browser could not reach your Supabase project. Check your internet connection,
+                  <span className="font-mono"> .env.local </span>
+                  values, and whether the Supabase project is paused.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="font-semibold">Inventory could not load.</p>
+                <p className="mt-1">Supabase returned: {loadError}</p>
+              </>
+            )}
           </div>
         ) : null}
 
@@ -143,15 +193,14 @@ export default function InventoryPage() {
             <div className="space-y-4">
               <input className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950" placeholder="Arduino Uno" value={name} onChange={(event) => setName(event.target.value)} required />
               <input className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950" placeholder="Category" value={category} onChange={(event) => setCategory(event.target.value)} />
-              <div className="grid grid-cols-2 gap-3">
+              <div>
                 <label className="text-sm">
                   Total stock
                   <input type="number" min={0} className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950" value={totalStock} onChange={(event) => setTotalStock(Number(event.target.value))} />
                 </label>
-                <label className="text-sm">
-                  Low stock
-                  <input type="number" min={0} className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950" value={threshold} onChange={(event) => setThreshold(Number(event.target.value))} />
-                </label>
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  Low stock alert is fixed at 1 remaining item.
+                </p>
               </div>
               <button disabled={Boolean(loadError) || profileLoading || !isAdmin} className="w-full rounded-md bg-slate-950 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-cyan-400 dark:text-slate-950">Save Item</button>
               {message ? <p className="text-sm text-slate-500 dark:text-slate-400">{message}</p> : null}
@@ -193,9 +242,30 @@ export default function InventoryPage() {
                       {item.missing_quantity ?? 0}
                     </span>
                     {isAdmin ? (
-                      <button onClick={() => handleDelete(item.id)} className="inline-flex size-9 items-center justify-center rounded-md border border-slate-200 text-red-600 dark:border-slate-700">
-                        <Trash2 size={16} />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={0}
+                          value={restockAmounts[item.id] ?? 0}
+                          onChange={(event) =>
+                            setRestockAmounts((current) => ({
+                              ...current,
+                              [item.id]: Number(event.target.value),
+                            }))
+                          }
+                          className="w-20 rounded-md border border-slate-200 bg-white px-2 py-2 dark:border-slate-700 dark:bg-slate-950"
+                          aria-label={`Restock ${item.name}`}
+                        />
+                        <button
+                          onClick={() => handleRestock(item)}
+                          className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold dark:border-slate-700"
+                        >
+                          Add
+                        </button>
+                        <button onClick={() => handleDelete(item.id)} className="inline-flex size-9 items-center justify-center rounded-md border border-slate-200 text-red-600 dark:border-slate-700">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     ) : (
                       <span className="text-xs text-slate-400">Read only</span>
                     )}
