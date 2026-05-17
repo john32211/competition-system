@@ -3,19 +3,38 @@
 import { supabase } from "@/lib/supabase";
 import RoleNotice from "@/components/RoleNotice";
 import { useCurrentProfile } from "@/hooks/useCurrentProfile";
-import type { Group } from "@/types/database";
+import { getInstructorProfiles, profileDisplayName } from "@/services/profiles";
+import type { CompetitionType, Group, Profile } from "@/types/database";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function GroupEditor({ group }: { group?: Group | null }) {
   const router = useRouter();
   const { loading: profileLoading, isAdmin } = useCurrentProfile();
+  const [instructors, setInstructors] = useState<Profile[]>([]);
   const [name, setName] = useState(group?.name ?? "");
   const [instructor, setInstructor] = useState(group?.instructor ?? "");
+  const [instructorId, setInstructorId] = useState(group?.instructor_id ?? "");
+  const [competitionType, setCompetitionType] = useState<CompetitionType>(
+    group?.competition_type ?? "robotics"
+  );
   const [session, setSession] = useState(group?.session ?? "");
   const [progress, setProgress] = useState(Number(group?.progress ?? 0));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    getInstructorProfiles().then(({ profiles }) => {
+      if (!active) return;
+      setInstructors(profiles);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -31,6 +50,8 @@ export default function GroupEditor({ group }: { group?: Group | null }) {
     const payload = {
       name: name.trim(),
       instructor: instructor.trim(),
+      instructor_id: instructorId || null,
+      competition_type: competitionType,
       session: session.trim(),
       progress: Math.min(Math.max(progress, 0), 100),
     };
@@ -78,14 +99,24 @@ export default function GroupEditor({ group }: { group?: Group | null }) {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-2 block text-sm font-medium">Instructor</label>
-          <input
-            value={instructor}
-            onChange={(event) => setInstructor(event.target.value)}
+          <label className="mb-2 block text-sm font-medium">Assigned Instructor Account</label>
+          <select
+            value={instructorId}
+            onChange={(event) => {
+              const nextId = event.target.value;
+              const selected = instructors.find((profile) => profile.id === nextId);
+              setInstructorId(nextId);
+              setInstructor(selected ? profileDisplayName(selected) : "");
+            }}
             className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
-            placeholder="Instructor name"
-            required
-          />
+          >
+            <option value="">No account assigned</option>
+            {instructors.map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {profileDisplayName(profile)}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div>
@@ -97,6 +128,26 @@ export default function GroupEditor({ group }: { group?: Group | null }) {
             placeholder="Sunday - 5 PM"
             required
           />
+        </div>
+      </div>
+
+      <div>
+        <label className="mb-2 block text-sm font-medium">Competition Type</label>
+        <div className="grid grid-cols-2 gap-2 rounded-md border border-slate-200 p-1 dark:border-slate-700">
+          {(["robotics", "coding"] as const).map((type) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => setCompetitionType(type)}
+              className={`rounded px-3 py-2 text-sm font-semibold capitalize ${
+                competitionType === type
+                  ? "bg-slate-950 text-white dark:bg-cyan-400 dark:text-slate-950"
+                  : "text-slate-600 dark:text-slate-300"
+              }`}
+            >
+              {type === "coding" ? "Coding only" : "Robotics"}
+            </button>
+          ))}
         </div>
       </div>
 

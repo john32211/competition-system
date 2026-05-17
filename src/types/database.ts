@@ -1,10 +1,12 @@
 export type UserRole = "admin" | "instructor";
+export type CompetitionType = "robotics" | "coding";
 
 export type Group = {
   id: string;
   name: string;
   instructor: string | null;
   instructor_id?: string | null;
+  competition_type?: CompetitionType | null;
   session: string | null;
   progress: number | null;
   created_at?: string;
@@ -41,6 +43,9 @@ export type Session = {
   session_date: string;
   planned: string | null;
   finished: string | null;
+  notes?: string | null;
+  issues?: string | null;
+  instructor_comments?: string | null;
 };
 
 export type ComponentRequirement = {
@@ -71,6 +76,47 @@ export type AttendanceRecord = {
 
 export type Profile = {
   id: string;
+  email?: string | null;
   full_name: string | null;
   role: UserRole;
+};
+
+export type WorkPlanTask = {
+  id: string;
+  group_id: string;
+  title: string;
+  description: string | null;
+  phase: string | null;
+  task_order: number;
+  required: boolean;
+  attachment_url?: string | null;
+  attachment_type?: string | null;
+  created_at?: string;
+};
+
+export type SessionTaskUpdate = {
+  id: string;
+  session_id: string;
+  task_id: string;
+  planned?: boolean;
+  status: "not_started" | "in_progress" | "finished";
+  completion_percent?: number;
+  comment: string | null;
+  assigned_to: string | null;
+  attachment_url?: string | null;
+  attachment_type?: string | null;
+  created_at?: string;
+};
+
+export type StudentAssignment = {
+  id: string;
+  group_id: string;
+  title: string;
+  description: string | null;
+  assigned_to: string | null;
+  due_date: string | null;
+  status: "open" | "submitted" | "reviewed";
+  attachment_url: string | null;
+  attachment_type: string | null;
+  created_at?: string;
 };

@@ -6,10 +6,16 @@ import {
   type CompetitionFile,
   uploadCompetitionFile,
 } from "@/services/storage";
+import { supabase } from "@/lib/supabase";
+import { useCurrentProfile } from "@/hooks/useCurrentProfile";
+import type { Group } from "@/types/database";
 import { ExternalLink, FileUp, Image, Video } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export default function FilesPage() {
+  const { loading: profileLoading, profile, isAdmin } = useCurrentProfile();
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [groupId, setGroupId] = useState("");
   const [folder, setFolder] = useState("reports");
   const [uploading, setUploading] = useState(false);
   const [loadingFiles, setLoadingFiles] = useState(true);
@@ -17,8 +23,9 @@ export default function FilesPage() {
   const [files, setFiles] = useState<CompetitionFile[]>([]);
 
   async function loadFiles() {
+    const visibleGroupIds = groups.map((group) => String(group.id));
     setLoadingFiles(true);
-    const { files: storageFiles, error } = await listCompetitionFiles();
+    const { files: storageFiles, error } = await listCompetitionFiles(visibleGroupIds);
     setFiles(storageFiles);
     setLoadingFiles(false);
 
@@ -28,23 +35,40 @@ export default function FilesPage() {
   }
 
   useEffect(() => {
+    if (profileLoading) return;
+
     let active = true;
 
-    listCompetitionFiles().then(({ files: storageFiles, error }) => {
+    async function loadGroupsAndFiles() {
+      let query = supabase.from("groups").select("*").order("name", { ascending: true });
+
+      if (!isAdmin && profile?.id) {
+        query = query.eq("instructor_id", profile.id);
+      }
+
+      const { data: groupRows, error: groupError } = await query;
+      const nextGroups = (groupRows ?? []) as Group[];
+      const visibleGroupIds = nextGroups.map((group) => String(group.id));
+      const { files: storageFiles, error } = await listCompetitionFiles(visibleGroupIds);
+
       if (!active) return;
 
+      setGroups(nextGroups);
+      setGroupId(String(nextGroups[0]?.id ?? ""));
       setFiles(storageFiles);
       setLoadingFiles(false);
 
-      if (error) {
-        setMessage(error.message);
+      if (groupError || error) {
+        setMessage(groupError?.message ?? error?.message ?? "");
       }
-    });
+    }
+
+    loadGroupsAndFiles();
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [profileLoading, profile?.id, isAdmin]);
 
   async function handleUpload(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -52,9 +76,13 @@ export default function FilesPage() {
     const input = form.elements.namedItem("file") as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
+    if (!groupId) {
+      setMessage("Choose a team before uploading.");
+      return;
+    }
 
     setUploading(true);
-    const result = await uploadCompetitionFile(file, folder);
+    const result = await uploadCompetitionFile(file, folder, groupId);
     setUploading(false);
 
     if (result.error) {
@@ -72,7 +100,9 @@ export default function FilesPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold">Files</h1>
-          <p className="mt-1 text-slate-500 dark:text-slate-400">Upload project images, demo videos, reports, and competition evidence.</p>
+          <p className="mt-1 text-slate-500 dark:text-slate-400">
+            Upload project images, demo videos, reports, and competition evidence to a specific team.
+          </p>
         </div>
 
         <section className="grid grid-cols-1 gap-6 lg:grid-cols-[420px_1fr]">
@@ -82,13 +112,21 @@ export default function FilesPage() {
               <h2 className="text-lg font-semibold">Upload Asset</h2>
             </div>
             <div className="space-y-4">
+              <select value={groupId} onChange={(event) => setGroupId(event.target.value)} className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
+                <option value="">Choose team</option>
+                {groups.map((group) => (
+                  <option key={group.id} value={String(group.id)}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
               <select value={folder} onChange={(event) => setFolder(event.target.value)} className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
                 <option value="reports">Reports and documents</option>
                 <option value="images">Project images</option>
                 <option value="videos">Demo videos</option>
               </select>
               <input name="file" type="file" className="w-full rounded-md border border-dashed border-slate-300 p-4 dark:border-slate-700" />
-              <button disabled={uploading} className="w-full rounded-md bg-slate-950 py-3 font-semibold text-white dark:bg-cyan-400 dark:text-slate-950">
+              <button disabled={uploading || !groupId} className="w-full rounded-md bg-slate-950 py-3 font-semibold text-white disabled:opacity-50 dark:bg-cyan-400 dark:text-slate-950">
                 {uploading ? "Uploading..." : "Upload to Storage"}
               </button>
             </div>
@@ -121,7 +159,7 @@ export default function FilesPage() {
             <div>
               <h2 className="text-lg font-semibold">Uploaded Files</h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Files stored in the Supabase <span className="font-mono">competition-files</span> bucket.
+                Files stored per team in the Supabase <span className="font-mono">competition-files</span> bucket.
               </p>
             </div>
             <button
@@ -151,7 +189,7 @@ export default function FilesPage() {
                     <p className="text-xs text-slate-500 dark:text-slate-400">{file.path}</p>
                   </div>
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold capitalize dark:bg-slate-800">
-                    {file.folder}
+                    {groups.find((group) => String(group.id) === file.groupId)?.name ?? "Team"} / {file.folder}
                   </span>
                   <span className="text-slate-500 dark:text-slate-400">
                     {file.size ? `${Math.round(file.size / 1024)} KB` : "Size N/A"}
