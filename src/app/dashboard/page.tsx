@@ -66,7 +66,7 @@ export default async function DashboardPage() {
           </div>
         </section>
 
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           {[
             ["Total Groups", groups.length, "Teams in season"],
             ["Students", students.length, "Registered competitors"],
@@ -85,7 +85,7 @@ export default async function DashboardPage() {
           ))}
         </section>
 
-        <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="rounded-md border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-6 flex items-center justify-between">
               <div>

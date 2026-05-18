@@ -9,13 +9,13 @@ export default function DashboardLayout({
 }) {
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-slate-100 text-slate-950 dark:bg-slate-950 dark:text-slate-100 lg:flex">
+      <div className="min-h-screen bg-slate-100 text-slate-950 dark:bg-slate-950 dark:text-slate-100 xl:flex">
         <Sidebar />
 
         <div className="min-w-0 flex-1">
           <Navbar />
 
-          <main className="p-4 sm:p-6 lg:p-8">{children}</main>
+          <main className="p-4 sm:p-6 xl:p-8">{children}</main>
         </div>
       </div>
     </AuthGuard>

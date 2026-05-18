@@ -41,7 +41,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="sticky top-0 z-30 flex max-h-screen flex-col border-r border-slate-800 bg-slate-950 text-white lg:h-screen lg:w-72">
+    <aside className="sticky top-0 z-30 flex max-h-screen flex-col border-r border-slate-800 bg-slate-950 text-white xl:h-screen xl:w-72">
       <div className="border-b border-slate-800 p-5">
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-300">
           Competition OS
@@ -49,7 +49,7 @@ export default function Sidebar() {
         <h1 className="mt-2 text-xl font-bold">Robotics Control</h1>
       </div>
 
-      <nav className="flex flex-1 gap-2 overflow-x-auto p-3 lg:block lg:space-y-1 lg:overflow-y-auto">
+      <nav className="flex flex-1 gap-2 overflow-x-auto p-3 xl:block xl:space-y-1 xl:overflow-y-auto">
         {links.map((link) => {
           const Icon = link.icon;
           const active = pathname === link.href || pathname.startsWith(`${link.href}/`);

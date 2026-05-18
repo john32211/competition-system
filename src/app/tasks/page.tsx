@@ -237,7 +237,7 @@ export default function TasksPage() {
           </div>
         ) : (
           <>
-            <section className="grid grid-cols-1 gap-6 xl:grid-cols-[460px_1fr]">
+            <section className="grid grid-cols-1 gap-6 lg:grid-cols-[420px_1fr]">
               <form onSubmit={handleSubmit} className="rounded-md border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
                 <div className="mb-5 flex items-center gap-2">
                   <ClipboardList size={20} />
@@ -333,7 +333,7 @@ export default function TasksPage() {
               </div>
             </section>
 
-            <section className="grid grid-cols-1 gap-6 xl:grid-cols-[460px_1fr]">
+            <section className="grid grid-cols-1 gap-6 lg:grid-cols-[420px_1fr]">
               <form onSubmit={handleWorkflowSubmit} className="rounded-md border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
                 <div className="mb-5 flex items-center gap-2">
                   <ListChecks size={20} />

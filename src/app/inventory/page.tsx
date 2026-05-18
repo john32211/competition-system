@@ -184,7 +184,7 @@ export default function InventoryPage() {
           />
         ) : null}
 
-        <section className="grid grid-cols-1 gap-6 xl:grid-cols-[380px_1fr]">
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-[380px_1fr]">
           <form onSubmit={handleCreate} className="rounded-md border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-5 flex items-center gap-2">
               <PackagePlus size={20} />
