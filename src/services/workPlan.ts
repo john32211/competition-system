@@ -55,6 +55,33 @@ export async function createGroupTask(input: {
   }).select("*").single();
 }
 
+export async function createGroupTasksForGroups(
+  tasks: Array<{
+    groupId: string;
+    title: string;
+    description?: string;
+    phase?: string;
+    taskOrder: number;
+    attachmentUrl?: string | null;
+    attachmentType?: string | null;
+  }>
+) {
+  return supabase
+    .from("work_plan_tasks")
+    .insert(
+      tasks.map((task) => ({
+        group_id: task.groupId,
+        title: task.title,
+        description: task.description || null,
+        phase: task.phase || null,
+        task_order: task.taskOrder,
+        attachment_url: task.attachmentUrl || null,
+        attachment_type: task.attachmentType || null,
+      }))
+    )
+    .select("*");
+}
+
 export async function seedDefaultTasks(groupId: string, type: CompetitionType) {
   const tasks = defaultTasksForType(type).map((title, index) => ({
     group_id: groupId,
