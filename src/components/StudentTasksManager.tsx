@@ -1,6 +1,6 @@
 "use client";
 
-import { uploadCompetitionFile } from "@/services/storage";
+import { normalizeCompetitionFileUrl, uploadCompetitionFile } from "@/services/storage";
 import {
   createStudentAssignment,
   deleteStudentAssignment,
@@ -153,7 +153,7 @@ export default function StudentTasksManager({
                 </div>
                 {assignment.attachment_url ? (
                   <a
-                    href={assignment.attachment_url}
+                    href={normalizeCompetitionFileUrl(assignment.attachment_url)}
                     target="_blank"
                     rel="noreferrer"
                     className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-cyan-700 dark:text-cyan-300"

@@ -57,20 +57,6 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
 
-insert into public.profiles (id, email, full_name, role)
-select
-  u.id,
-  u.email,
-  coalesce(u.raw_user_meta_data->>'full_name', split_part(u.email, '@', 1)),
-  'instructor'
-from auth.users u
-where not exists (select 1 from public.profiles p where p.id = u.id)
-on conflict (id) do nothing;
-
-update public.profiles
-set role = 'admin'
-where email = 'jamgad43@gmail.com';
-
 -- Link legacy bigint groups to auth profiles.
 alter table public.groups
   add column if not exists instructor_id uuid references public.profiles (id),
@@ -265,24 +251,6 @@ create policy "admins can manage inventory"
         and p.role = 'admin'
     )
   );
-
-insert into public.inventory_items
-  (name, category, total_stock, remaining_stock, missing_quantity, low_stock_threshold)
-values
-  ('Arduino Uno', 'Controllers', 20, 20, 0, 1),
-  ('Servo Motor', 'Actuators', 30, 30, 0, 1),
-  ('Ultrasonic Sensor', 'Sensors', 18, 18, 0, 1),
-  ('LED', 'Electronics', 100, 100, 0, 1),
-  ('LDR Sensor', 'Sensors', 24, 24, 0, 1),
-  ('DC Motor', 'Actuators', 28, 28, 0, 1),
-  ('Motor Driver', 'Drivers', 18, 18, 0, 1),
-  ('Breadboard', 'Prototyping', 25, 25, 0, 1),
-  ('Battery Pack', 'Power', 22, 22, 0, 1)
-on conflict (name) do nothing;
-
-update public.inventory_items
-set low_stock_threshold = 1
-where low_stock_threshold <> 1;
 
 -- Attendance table matching your existing bigint ids.
 create table if not exists public.session_attendance (

@@ -3,6 +3,38 @@ import { supabase } from "@/lib/supabase";
 const BUCKET = "competition-files";
 const FOLDERS = ["reports", "images", "videos", "tasks"] as const;
 
+function publicObjectUrl(path: string) {
+  const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
+  const encodedPath = path
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+
+  return `${baseUrl}/storage/v1/object/public/${BUCKET}/${encodedPath}`;
+}
+
+export function normalizeCompetitionFileUrl(urlOrPath: string | null | undefined) {
+  if (!urlOrPath) return "";
+
+  const marker = `/storage/v1/object/${BUCKET}/`;
+  const publicMarker = `/storage/v1/object/public/${BUCKET}/`;
+
+  if (urlOrPath.includes(publicMarker)) {
+    return urlOrPath;
+  }
+
+  if (urlOrPath.includes(marker)) {
+    const path = urlOrPath.split(marker)[1];
+    return publicObjectUrl(decodeURIComponent(path));
+  }
+
+  if (!urlOrPath.startsWith("http")) {
+    return publicObjectUrl(urlOrPath);
+  }
+
+  return urlOrPath;
+}
+
 export type CompetitionFile = {
   name: string;
   folder: string;
@@ -34,9 +66,7 @@ export async function uploadCompetitionFile(file: File, folder: string, groupId:
     };
   }
 
-  const { data: publicUrl } = supabase.storage.from(BUCKET).getPublicUrl(data.path);
-
-  return { path: data.path, publicUrl: publicUrl.publicUrl, error: null };
+  return { path: data.path, publicUrl: publicObjectUrl(data.path), error: null };
 }
 
 export async function listCompetitionFiles(groupIds: string[] = []) {
@@ -59,14 +89,13 @@ export async function listCompetitionFiles(groupIds: string[] = []) {
           .filter((file) => file.name !== ".emptyFolderPlaceholder")
           .map((file) => {
             const path = `${prefix}/${file.name}`;
-            const { data: publicUrl } = supabase.storage.from(BUCKET).getPublicUrl(path);
 
             return {
               name: file.name,
               folder,
               groupId,
               path,
-              publicUrl: publicUrl.publicUrl,
+              publicUrl: publicObjectUrl(path),
               size: Number(file.metadata?.size ?? 0),
               updatedAt: file.updated_at ?? file.created_at ?? null,
             };
@@ -97,14 +126,13 @@ export async function listLegacyCompetitionFiles() {
         .filter((file) => file.name !== ".emptyFolderPlaceholder")
         .map((file) => {
           const path = `${folder}/${file.name}`;
-          const { data: publicUrl } = supabase.storage.from(BUCKET).getPublicUrl(path);
 
           return {
             name: file.name,
             folder,
             groupId: "legacy",
             path,
-            publicUrl: publicUrl.publicUrl,
+            publicUrl: publicObjectUrl(path),
             size: Number(file.metadata?.size ?? 0),
             updatedAt: file.updated_at ?? file.created_at ?? null,
           };
