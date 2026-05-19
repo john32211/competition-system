@@ -331,3 +331,4 @@ create policy "competition_files_delete"
   on storage.objects for delete
   to authenticated
   using (bucket_id = 'competition-files');
+select * from public.notifications;
